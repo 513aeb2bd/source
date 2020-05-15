@@ -120,7 +120,7 @@ str2double:
             shl  r9,cl
             or  rax,r9
             sub  cl,1
-            jnc LoopFillFrac    ; if shift count < 0
+            jnc  LoopFillFrac    ; if shift count < 0
        _LabelCheckCarry:
         mov  r8b,[rsp + 11]    ; @@@ mem acc
         cmp  r8b,35h
