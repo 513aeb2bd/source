@@ -5,131 +5,132 @@ public str2double
 
 section '.code' code readable executable
 
+; stack structune
+; (top)|30|32|34|36|38|30|32|34|36|38|frac...
+
 str2double:
         ; rcx-in: addr of 'numb str'
 
+       _LabelArgumentCheck:
         test  rcx,rcx
         jz  _BranReturn
 
-        push  rbx    ; @@@ mem acc
         push  rbp    ; @@@ mem acc
         mov  rbp,rsp
 
-        mov  rbx,rcx
         xor  rax,rax
         xor  r8,r8
         mov  r9,10
-        LoopDecInt2Bin:
-            mov  r8b,[rbx]    ; @@@ mem acc
-            inc  rbx
+        LoopIntDec2Bin:
+            mov  r8b,[rcx]    ; get int ascii @@@ mem acc
+            inc  rcx    ; point next int ascii
             cmp  r8b,2eh
-            jz  _BreakDecInt2Bin
-            mul  r9
-            sub  r8b,30h
-            add  rax,r8
-            jmp  LoopDecInt2Bin
-        ; rax = binary conversion of integer decimal 'numb str'
+            jz  _BreakDecInt2Bin    ; if ascii == '.'
+            mul  r9    ; shift dec number left by 1
+            and  r8b,0fh    ; ascii to number
+            add  rax,r8    ; add to dec number
+            jmp  LoopIntDec2Bin
+        ; rax = int dec to bin
+        ; rcx = addr of first frac 'numb str'
        _BreakDecInt2Bin:
         xor  rdx,rdx
         LoopCountFrac:
-            mov  r8b,[rbx + rdx]    ; @@@ mem acc
-            inc  rdx
+            mov  r8b,[rcx + rdx]    ; get frac ascii @@@ mem acc
+            inc  rdx    ; point next frac ascii
             test  r8b,r8b
-            jnz  LoopCountFrac
-        ; rdx = length of fraction decimal 'numb str'
-        sub  rsp,rdx
-        mov  r9,rdx
-        LoopInitFrac:
-            dec  rdx
-            mov  r8b,[rbx + rdx]    ; @@@ mem acc
-            mov  [rsp + rdx],r8b    ; @@@ mem acc
-            jnz  LoopInitFrac
-        ; fraction numbers copied to stack
-       _LableInit2xNumb:
-        sub  rsp,11    ; extra 1 byte of space
+            jnz  LoopCountFrac    ; if ascii == null
+        ; rdx = length of dec frac including null
+        sub  rsp,rdx    ; make space for frac ascii including null
+        LoopCopyFrac:
+            dec  rdx    ; point previous frac ascii
+            mov  r8b,[rcx + rdx]    ; copy frac ascii @@@ mem acc
+            mov  [rsp + rdx],r8b    ; paste frac ascii @@@ mem acc
+            jnz  LoopCopyFrac    ; until all frac ascii copied
+       _LabelInit2xNumb:
+        sub  rsp,11    ; make 10 + 1 byte of space
         mov  rdx,3432303836343230h
         mov  [rsp],rdx    ; store '02468024' @@@ mem acc
-        shr  rdx,24    ; dx = 3836h
+        shr  rdx,24
         mov  [rsp + 8],dx    ; store '68' @@@ mem acc
        _LableCheckZeroInt:
         test  rax,rax
-        jz  _BranIntegerZero    ; if integer part is 0
-       _LableExponent:
+        jz  _BranIntZero    ; if int == 0
+       _LabelExp:
         xor  r8,r8
         mov  rdx,rax
-        mov  cl,53    ; 53 is frac starting bit + 1 in float64 format
+        mov  cl,53    ; 53 is exp least significant bit + 1
         LoopCountBit:
             inc  r8
-            shr  rdx,1
-            jnz  LoopCountBit
-        ; r8 = count of binary digit of int
-        sub  rcx,r8    ; shift left value to position in 52th bit
-        shl  rax,cl
-        add  r8,3feh
-        btr  rax,52    ; clear 52th bit
-        shl  r8,52
+            shr  rdx,1    ; count 1 bit
+            jnz  LoopCountBit    ; if all bits counted
+        ; r8 = number of figures of bin int
+        ; r8 >= 1
+        sub  rcx,r8
+        shl  rax,cl    ; put most significant bit of int on 52nd bit
+        add  r8,3feh    ; add (bias - 1)
+        btr  rax,52    ; clear 52nd bit
+        shl  r8,52    ; put exp to exp position
         dec  cl    ; cl = next frac bit shift count
-        or  rax,r8    ; add exponent
-        jmp  _LabelRestFrac    ; calculate rest frac
-       _BranIntegerZero:
+        or  rax,r8    ; insert exp
+        jmp  _LabelRestFrac
+       _BranIntZero:
         xor  r9,r9
-        mov  ax,3feh
+        mov  ax,3feh    ; exp start from (bias - 1)
         LoopFirstNonZeroBit:
-            mov  r8b,[rsp + 11]    ; get first digit of frac @@@ mem acc
+            mov  r8b,[rsp + 11]    ; get first frac ascii @@@ mem acc
             xor  rdx,rdx
            .LoopDoubleFrac:
-                mov  r9b,[rsp + rdx + 11]    ; @@@ mem acc
+                mov  r9b,[rsp + rdx + 11]    ; get frac ascii @@@ mem acc
                 test  r9b,r9b
-                jz  .BreakDoubleFrac
+                jz  .BreakDoubleFrac    ; if ascii == null
                 cmp  r9b,35h
-                setnc  cl    ; carry
-                add  [rsp + rdx + 10],cl    ; @@@ mem acc
-                and  r9b,0fh    ; character to number
-                mov  r9b,[rsp + r9]    ; get 2x of digit @@@ mem acc
-                mov  [rsp + rdx + 11],r9b    ; update digit @@@ mem acc
-                inc  rdx
+                setnc  cl    ; if ascii >= '5'
+                add  [rsp + rdx + 10],cl    ; add carry @@@ mem acc
+                and  r9b,0fh    ; ascii to number
+                mov  r9b,[rsp + r9]    ; get 2x of number @@@ mem acc
+                mov  [rsp + rdx + 11],r9b    ; update ascii @@@ mem acc
+                inc  rdx    ; point next ascii
                 jmp  .LoopDoubleFrac
            .BreakDoubleFrac:
             cmp  r8b,35h
-            jnc  _BreakFirstNonZeroBit
-            dec  eax
+            jnc  _BreakFirstNonZeroBit    ; if first frac ascii >= '5'
+            dec  eax    ; decrement exp
             jmp  LoopFirstNonZeroBit
        _BreakFirstNonZeroBit:
-        shl  rax,52
-        mov  cl,51
+        shl  rax,52    ; put exp to exp position
+        mov  cl,51    ; frac bin is from 51st bit to 0th
        _LabelRestFrac:
         LoopFillFrac:
             xor  r9,r9
-            mov  r8b,[rsp + 11]    ; get first digit of frac @@@ mem acc
+            mov  r8b,[rsp + 11]    ; get first frac ascii @@@ mem acc
             xor  rdx,rdx
            .LoopDoubleFrac:
-                mov  r9b,[rsp + rdx + 11]    ; @@@ mem acc
+                mov  r9b,[rsp + rdx + 11]    ; get frac ascii @@@ mem acc
                 test  r9b,r9b
-                jz  .BreakDoubleFrac
+                jz  .BreakDoubleFrac    ; if ascii == null
                 cmp  r9b,35h
-                setnc  ch    ; carry
-                add  [rsp + rdx + 10],ch    ; @@@ mem acc
-                and  r9b,0fh
-                mov  r9b,[rsp + r9]    ; get 2x of digit @@@ mem acc
-                inc  rdx
-                mov  [rsp + rdx + 10],r9b    ; @@@ mem acc
+                setnc  ch    ; if ascii >= '5'
+                add  [rsp + rdx + 10],ch    ; add carry @@@ mem acc
+                and  r9b,0fh    ; ascii to number
+                mov  r9b,[rsp + r9]    ; get 2x of number @@@ mem acc
+                mov  [rsp + rdx + 11],r9b    ; update ascii @@@ mem acc
+                inc  rdx    ; point next ascii
                 jmp  .LoopDoubleFrac
            .BreakDoubleFrac:
             cmp  r8b,35h
-            setnc  r9b
-            shl  r9,cl
-            or  rax,r9
+            setnc  r9b    ; if first frac ascii >= '5'
+            shl  r9,cl    ; shift to current bit position
+            or  rax,r9    ; insert frac bit
             sub  cl,1
             jnc  LoopFillFrac    ; if shift count < 0
-       _LabelCheckCarry:
-        mov  r8b,[rsp + 11]    ; @@@ mem acc
+       _LabelCheckLastCarry:
+        mov  r8b,[rsp + 11]    ; get first frac ascii @@@ mem acc
         cmp  r8b,35h
-        setnc  r9b
-        add  rax,r9
+        setnc  r9b    ; if first frac ascii >= '5'
+        add  rax,r9    ; add carry
 
         mov  rsp,rbp
         pop  rbp    ; @@@ mem acc
-        pop  rbx    ; @@@ mem acc
 
        _BranReturn:
         ret
