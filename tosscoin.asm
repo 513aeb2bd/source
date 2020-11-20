@@ -2,16 +2,16 @@ format ms64 coff
 
 section '.text' code readable executable
 
-public bernoulli as 'trialBernoulli'
+public tossCoin
 
 ; MWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWM
 ; MWM                                                 MWM
-; MWM Bernoulli Trial                                 MWM
+; MWM Toss Coin                                       MWM
 ; MWM toss n coins, returns number of head side       MWM
 ; MWM                                                 MWM
 ; MWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWMWMWM MWM
 
-bernoulli:
+tossCoin:
         ; rcx-in = number of total trial
     mov   r8,rcx    ; r8 = number of total trial
     shr   r8,6    ; r8 = quotient of r8 divided by 64
