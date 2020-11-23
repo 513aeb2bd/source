@@ -26,6 +26,7 @@ tossCoin:
         dec   r8    ; r8 -= 1
         jmp   LoopUntilR8Zero
    _BreakUntilR8Zero:
+    xor   rax,rax    ; rax = 0
     mov   r8,rcx    ; r8 = number of total trials
     and   rcx,3fh    ; rcx = remainder of rcx divided by 64
     mov   al,1
