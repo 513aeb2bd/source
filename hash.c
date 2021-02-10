@@ -35,32 +35,30 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
             , 0xd5, 0x00, 0x1b, 0x7a, 0x78, 0x57, 0x5f, 0x7d
             , 0xa6, 0xfe, 0x44, 0x6a, 0x98, 0xf7, 0xa1, 0x63 };
     ui8* msgchar = (ui8*)msg;
-    ui8 msg_frac[8] = { 0 };
+    ui8 msg_frac[64] = { 0 };
     ui8 cursor_rot = 0;
     ui8 cursor_pnt = 0;
     ui8 rotat = 0;
     ui8 d_reg[8];
-    ui64 A, B, R, M;
+    ui64 A, R;
+    ui64* B, * M, * Ma1, * Ma2, *Ma3;
     ui8* Apart = (ui8*)&A;
 
-    // misc vars
-    ui64 i_byte, t, i_rep;
+    // misc, temp vars
+    ui64 i_byte, i_byte_last, t, i_rep;
     ui8 swp;
 
-    // operate
+    // operation begin
 
     hash[0] = 0xcc545cee1e0ab8f6;
     hash[1] = 0xa732f2564dda012a;
     hash[2] = 0xe63bf7079267b48b;
     hash[3] = 0x46377d840ee0e2f8;
 
-    if (!num_bytes) {
-        return;
-    }
-
     // pad leading zero first fraction of message
-    t = num_bytes & 7;
-    i_rep = 8;
+    // if num_bytes divisible by 64, no padding
+    t = num_bytes & 63;
+    i_rep = 64;
 
     for (;;) {
         if (!t) {
@@ -72,78 +70,83 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         msg_frac[i_rep] = msgchar[t];
     }
 
+    // make code to operate at least 8 times
+    // if num_bytes == 0, num_bytes = 1
+    num_bytes |= !num_bytes;
+
     // iterate for every 8-byte (from last to first)
     i_byte = num_bytes;
+    i_byte_last = 64;
 
     for (;;) {
-        if (!i_byte) {
+        // if num_bytes divisible by 64, i_byte can be zero
+        // if not, i_byte_last can be zero
+        if (!(i_byte && i_byte_last)) {
             break;
         }
 
         // get current message
-        if (i_byte < 8) {
-            i_byte = 0;
-            M = *(ui64*)msg_frac;
+        if (i_byte <= (num_bytes & 63)) {
+            i_byte_last -= 8;
+            M = (ui64*)(msg_frac + i_byte_last);
+            Ma1 = (ui64*)(msg_frac + (i_byte_last ^ 24));
+            Ma2 = (ui64*)(msg_frac + (i_byte_last ^ 40));
+            Ma3 = (ui64*)(msg_frac + (i_byte_last ^ 56));
         }
         else {
             i_byte -= 8;
-            M = *(ui64*)(msgchar + i_byte);
+            M = (ui64*)(msgchar + i_byte);
+            Ma1 = (ui64*)(msgchar + (i_byte ^ 24));
+            Ma2 = (ui64*)(msgchar + (i_byte ^ 40));
+            Ma3 = (ui64*)(msgchar + (i_byte ^ 56));
         }
 
-        // iterate i_rep time to calculate sub-hash
-        i_rep = 16;
+        // calculate A
+        *(ui64*)d_reg = hash[0] + (*M ^ *Ma1 ^ ~*Ma2 ^ *Ma3);
+        cursor_pnt += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
+                + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
+
+        Apart[0] = map[cursor_pnt];
+        Apart[1] = map[cursor_pnt ^ 1];
+        Apart[2] = map[cursor_pnt ^ 2];
+        Apart[3] = map[cursor_pnt ^ 3];
+        Apart[4] = map[cursor_pnt ^ 4];
+        Apart[5] = map[cursor_pnt ^ 5];
+        Apart[6] = map[cursor_pnt ^ 6];
+        Apart[7] = map[cursor_pnt ^ 7];
+        A += hash[1];
+
+        // calculate R
+        *(ui64*)d_reg = hash[1] & hash[2] | ~hash[1] & hash[3];
+        cursor_rot += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
+                + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
+        rotat = map[cursor_rot] & 0x3f;
+
+        B = (ui64*)d_reg;
+        R = *B << rotat | *B >> (64 - rotat);
+
+        // complete a round
+        t = hash[3];
+        hash[3] = hash[2];
+        hash[2] = R + t;
+        hash[1] = hash[0];
+        hash[0] = A + R;
+
+        // permute map data
+        t = 8;
 
         for (;;) {
-            if (!i_rep) {
+            if (!t) {
                 break;
             }
 
-            i_rep -= 1;
-
-            // calculate A
-            *(ui64*)d_reg = hash[0] + M;
-            cursor_pnt += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
-                    + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
-
-            Apart[0] = map[cursor_pnt];
-            Apart[1] = map[cursor_pnt ^ 1];
-            Apart[2] = map[cursor_pnt ^ 2];
-            Apart[3] = map[cursor_pnt ^ 3];
-            Apart[4] = map[cursor_pnt ^ 4];
-            Apart[5] = map[cursor_pnt ^ 5];
-            Apart[6] = map[cursor_pnt ^ 6];
-            Apart[7] = map[cursor_pnt ^ 7];
-            A += hash[1];
-
-            // calculate R
-            *(ui64*)d_reg = hash[1] & hash[2] | ~hash[1] & hash[3];
-            cursor_rot += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
-                    + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
-            rotat = map[cursor_rot] & 0x3f;
-
-            B = *(ui64*)d_reg;
-            R = B << rotat | B >> (64 - rotat);
-
-            // complete a round
-            t = hash[3];
-            hash[3] = hash[2];
-            hash[2] = R + t;
-            hash[1] = hash[0];
-            hash[0] = A + R;
-
-            // permute map data
-            t = 8;
-
-            for (;;) {
-                if (!t) {
-                    break;
-                }
-
-                t -= 1;
-                swp = map[cursor_rot ^ t << 3];
-                map[cursor_rot ^ t << 3] = map[cursor_pnt ^ t];
-                map[cursor_pnt ^ t] = swp;
-            }
+            t -= 1;
+            swp = map[cursor_rot ^ t << 3];
+            map[cursor_rot ^ t << 3] = map[cursor_pnt ^ t];
+            map[cursor_pnt ^ t] = swp;
         }
+
+        // move pointing cursor
+        cursor_pnt += 8;
     }
 }
