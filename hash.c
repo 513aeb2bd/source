@@ -1,5 +1,13 @@
-typedef unsigned char ui8;
-typedef unsigned long long ui64;
+#ifdef DEBUGHASH
+
+#include <stdio.h>
+
+#endif
+
+#include <stdint.h>
+
+typedef uint64_t ui64;
+typedef uint8_t ui8;
 
 void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
     ui8 map[256] = { 0x81, 0x59, 0x94, 0xb1, 0x10, 0x47, 0x86, 0x70
@@ -39,7 +47,7 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
     ui8 cursor_rot = 0;
     ui8 cursor_pnt = 0;
     ui8 rotat = 0;
-    ui8 d_reg[8];
+    ui8 dr[8];
     ui64 A, R;
     ui64* B, * M, * Ma1, * Ma2, *Ma3;
     ui8* Apart = (ui8*)&A;
@@ -69,6 +77,19 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         i_rep -= 1;
         msg_frac[i_rep] = msgchar[t];
     }
+
+#ifdef DEBUGHASH
+
+    printf ("input string length:    %u\n", num_bytes);
+    printf ("0-padded srting length: %u\n", i_rep & 63);
+    printf ("total string length:    %u\n\n", num_bytes + (i_rep & 63));
+
+    printf ("Hash0: %016llx %016llx %016llx %016llx\n"
+            , hash[3], hash[2], hash[1], hash[0]);
+
+    i_rep = 0;
+
+#endif
 
     // make code to operate at least 8 times
     // if num_bytes == 0, num_bytes = 1
@@ -102,9 +123,15 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         }
 
         // calculate A
-        *(ui64*)d_reg = hash[0] + (*M ^ *Ma1 ^ ~*Ma2 ^ *Ma3);
-        cursor_pnt += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
-                + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
+        *(ui64*)dr = hash[0] + (*M ^ *Ma1 ^ ~*Ma2 ^ *Ma3);
+        cursor_pnt += dr[3] & dr[5] ^ dr[7];
+        cursor_pnt += dr[2] & dr[4] ^ dr[6];
+        cursor_pnt += dr[1] & dr[7] ^ dr[5];
+        cursor_pnt += dr[0] & dr[6] ^ dr[4];
+        cursor_pnt += dr[7] & dr[1] ^ dr[3];
+        cursor_pnt += dr[6] & dr[0] ^ dr[2];
+        cursor_pnt += dr[5] & dr[3] ^ dr[1];
+        cursor_pnt += dr[4] & dr[2] ^ dr[0];
 
         Apart[0] = map[cursor_pnt];
         Apart[1] = map[cursor_pnt ^ 1];
@@ -117,12 +144,12 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         A += hash[1];
 
         // calculate R
-        *(ui64*)d_reg = hash[1] & hash[2] | ~hash[1] & hash[3];
-        cursor_rot += d_reg[0] + d_reg[1] + d_reg[2] + d_reg[3]
-                + d_reg[4] + d_reg[5] + d_reg[6] + d_reg[7];
+        *(ui64*)dr = hash[1] & hash[2] | ~hash[1] & hash[3];
+        cursor_rot += dr[0] + dr[1] + dr[2] + dr[3]
+                + dr[4] + dr[5] + dr[6] + dr[7] + cursor_pnt;
         rotat = map[cursor_rot] & 0x3f;
 
-        B = (ui64*)d_reg;
+        B = (ui64*)dr;
         R = *B << rotat | *B >> (64 - rotat);
 
         // complete a round
@@ -131,6 +158,17 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         hash[2] = R + t;
         hash[1] = hash[0];
         hash[0] = A + R;
+
+#ifdef DEBUGHASH
+
+        i_rep += 1;
+        printf ("    M%u = %016llx | ", i_rep, *M);
+        printf ("A%u = %016llx | ", i_rep, A);
+        printf ("B%u = %016llx | R%u = %016llx |\n", i_rep, *B, i_rep, R);
+        printf ("Hash%u = %016llx %016llx %016llx %016llx\n"
+                , i_rep, hash[3], hash[2], hash[1], hash[0]);
+
+#endif
 
         // permute map data
         t = 8;
@@ -145,8 +183,5 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
             map[cursor_rot ^ t << 3] = map[cursor_pnt ^ t];
             map[cursor_pnt ^ t] = swp;
         }
-
-        // move pointing cursor
-        cursor_pnt += 8;
     }
 }
