@@ -44,8 +44,8 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
             , 0xa6, 0xfe, 0x44, 0x6a, 0x98, 0xf7, 0xa1, 0x63 };
     ui8* msgchar = (ui8*)msg;
     ui8 msg_frac[64] = { 0 };
-    ui8 cursor_rot = 0;
-    ui8 cursor_pnt = 0;
+    ui8 idxrot = 0;
+    ui8 idxpnt = 0;
     ui8 rotat = 0;
     ui8 dr[8];
     ui64 A, R;
@@ -79,16 +79,14 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
     }
 
 #ifdef DEBUGHASH
+    printf ("input string length:    %6u\n", num_bytes);
+    printf ("0-padded string length: %6u\n", i_rep & 63);
+    printf ("total string length:    %6u\n\n", num_bytes + (i_rep & 63));
 
-    printf ("input string length:    %u\n", num_bytes);
-    printf ("0-padded srting length: %u\n", i_rep & 63);
-    printf ("total string length:    %u\n\n", num_bytes + (i_rep & 63));
-
-    printf ("Hash0: %016llx %016llx %016llx %016llx\n"
+    printf ("    Hash0: %016llx %016llx %016llx %016llx\n"
             , hash[3], hash[2], hash[1], hash[0]);
 
     i_rep = 0;
-
 #endif
 
     // make code to operate at least 8 times
@@ -124,33 +122,55 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
 
         // calculate A
         *(ui64*)dr = hash[0] + (*M ^ *Ma1 ^ ~*Ma2 ^ *Ma3);
-        cursor_pnt += dr[3] & dr[5] ^ dr[7];
-        cursor_pnt += dr[2] & dr[4] ^ dr[6];
-        cursor_pnt += dr[1] & dr[7] ^ dr[5];
-        cursor_pnt += dr[0] & dr[6] ^ dr[4];
-        cursor_pnt += dr[7] & dr[1] ^ dr[3];
-        cursor_pnt += dr[6] & dr[0] ^ dr[2];
-        cursor_pnt += dr[5] & dr[3] ^ dr[1];
-        cursor_pnt += dr[4] & dr[2] ^ dr[0];
+        idxpnt += dr[3] & dr[5] ^ dr[7];
+        idxpnt += dr[2] & dr[4] ^ dr[6];
+        idxpnt += dr[1] & dr[7] ^ dr[5];
+        idxpnt += dr[0] & dr[6] ^ dr[4];
+        idxpnt += dr[7] & dr[1] ^ dr[3];
+        idxpnt += dr[6] & dr[0] ^ dr[2];
+        idxpnt += dr[5] & dr[3] ^ dr[1];
+        idxpnt += dr[4] & dr[2] ^ dr[0];
 
-        Apart[0] = map[cursor_pnt];
-        Apart[1] = map[cursor_pnt ^ 1];
-        Apart[2] = map[cursor_pnt ^ 2];
-        Apart[3] = map[cursor_pnt ^ 3];
-        Apart[4] = map[cursor_pnt ^ 4];
-        Apart[5] = map[cursor_pnt ^ 5];
-        Apart[6] = map[cursor_pnt ^ 6];
-        Apart[7] = map[cursor_pnt ^ 7];
+#ifdef DEBUGHASH
+        printf ("rep %u\n", i_rep);
+        printf ("  M* = %016llx | M1 = %016llx | M2 = %016llx | M3 = %016llx\n"
+                , *M, *Ma1, *Ma2, *Ma3);
+        printf ("  hash0 add (M* xor M1 xor (not M2) xor M3) = %016llx\n"
+                , *(ui64*)dr);
+        printf ("  new point idx = %02x | ", idxpnt);
+#endif
+
+        Apart[0] = map[idxpnt];
+        Apart[1] = map[idxpnt ^ 1];
+        Apart[2] = map[idxpnt ^ 2];
+        Apart[3] = map[idxpnt ^ 3];
+        Apart[4] = map[idxpnt ^ 4];
+        Apart[5] = map[idxpnt ^ 5];
+        Apart[6] = map[idxpnt ^ 6];
+        Apart[7] = map[idxpnt ^ 7];
         A += hash[1];
+
+#ifdef DEBUGHASH
+        printf ("map data = %016llx | ", A - hash[1]);
+        printf ("A = %016llx\n", A);
+#endif
 
         // calculate R
         *(ui64*)dr = hash[1] & hash[2] | ~hash[1] & hash[3];
-        cursor_rot += dr[0] + dr[1] + dr[2] + dr[3]
-                + dr[4] + dr[5] + dr[6] + dr[7] + cursor_pnt;
-        rotat = map[cursor_rot] & 0x3f;
+        idxrot += dr[0] + dr[1] + dr[2] + dr[3]
+                + dr[4] + dr[5] + dr[6] + dr[7] + idxpnt;
+        rotat = map[idxrot] & 0x3f;
 
         B = (ui64*)dr;
         R = *B << rotat | *B >> (64 - rotat);
+
+#ifdef DEBUGHASH
+        printf ("  hash1 and hash2 xor (not hash1) and hash3 = %016llx\n"
+                , *(ui64*)dr);
+        printf ("  rotat idx = %02x | ", idxrot);
+        printf ("masked rotat count = %02x | ", rotat);
+        printf ("B = %016llx | B rol %02x = %016llx |\n", *B, rotat, R);
+#endif
 
         // complete a round
         t = hash[3];
@@ -160,14 +180,9 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
         hash[0] = A + R;
 
 #ifdef DEBUGHASH
-
         i_rep += 1;
-        printf ("    M%u = %016llx | ", i_rep, *M);
-        printf ("A%u = %016llx | ", i_rep, A);
-        printf ("B%u = %016llx | R%u = %016llx |\n", i_rep, *B, i_rep, R);
-        printf ("Hash%u = %016llx %016llx %016llx %016llx\n"
+        printf ("    Hash%u = %016llx %016llx %016llx %016llx\n"
                 , i_rep, hash[3], hash[2], hash[1], hash[0]);
-
 #endif
 
         // permute map data
@@ -179,9 +194,9 @@ void hash_256 (void* msg, ui64 num_bytes, ui64* hash) {
             }
 
             t -= 1;
-            swp = map[cursor_rot ^ t << 3];
-            map[cursor_rot ^ t << 3] = map[cursor_pnt ^ t];
-            map[cursor_pnt ^ t] = swp;
+            swp = map[idxrot ^ t << 3];
+            map[idxrot ^ t << 3] = map[idxpnt ^ t];
+            map[idxpnt ^ t] = swp;
         }
     }
 }
